@@ -5,6 +5,10 @@ from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 from html import unescape
 from urllib.parse import urljoin
+from fpdf import FPDF
+import unicodedata
+from datetime import datetime
+
 
 class OpenAustraliaAPI:
     def __init__(self, api_key=None, api_url="https://www.openaustralia.org.au/api"):
@@ -51,8 +55,12 @@ class OpenAustraliaAPI:
         # Merge additional parameters
         params.update(kwargs)
 
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/87.0.4280.66 Safari/537.36'
+        }
+
         try:
-            response = requests.get(api_endpoint, params=params)
+            response = requests.get(api_endpoint, params=params, headers=headers)
             
             # Print HTTP status code for debugging
             print(f"HTTP Status Code for '{function}':", response.status_code)
@@ -83,6 +91,7 @@ class OpenAustraliaAPI:
             print(f"An unexpected error occurred in '{function}': {err}")
 
         return None
+
 
     def get_senators(self, date=None, party=None, state=None, search=None, page=None, num=None):
         """
@@ -341,52 +350,44 @@ class OpenAustraliaAPI:
         else:
             print("No Hansard entries found or an error occurred.")
             return None
-"""
-def fetch_full_speech(url):
-    try:
-        # Unescape the URL
-        unescaped_url = unescape(url)
-        # Remove fragment identifier
-        unescaped_url = unescaped_url.split('#')[0]
-        # Ensure the URL uses https
-        if not unescaped_url.startswith('http'):
-            full_url = f"https://www.openaustralia.org.au{unescaped_url}"
-        else:
-            full_url = unescaped_url
 
-        print(f"Fetching full speech from {full_url}")
-        response = requests.get(full_url)
-        response.raise_for_status()
+        from datetime import datetime
 
-        # Parse the HTML to extract the full speech text
-        soup = BeautifulSoup(response.content, 'html.parser')
+    def get_hansard_by_date_range(self, start_date, end_date, **kwargs):
+        """
+        Fetch Hansard data and filter speeches within a specified date range.
 
-        # Try different selectors to find the speech content
-        # These selectors are based on common patterns; adjust as needed
-        speech_div = (
-            soup.find('div', {'class': 'speech'}) or
-            soup.find('div', {'class': 'speech_text'}) or
-            soup.find('div', {'id': 'speech'}) or
-            soup.find('div', {'class': 'debate-body'})  # Example alternative
-        )
-        
-        if speech_div:
-            full_speech = speech_div.get_text(separator="\n").strip()
-            return full_speech
-        else:
-            # If the expected div is not found, print a snippet of the HTML for debugging
-            print(f"Could not find the speech content in the page: {full_url}")
-            print("Attempting to extract text from the entire page.")
-            full_speech = soup.get_text(separator="\n").strip()
-            # Optionally, implement more sophisticated extraction here
-            # For now, return the first 1000 characters as a fallback
-            snippet = full_speech[:1000]
-            print(f"HTML Snippet: {snippet}")
-            return full_speech[:1000] + '...'  # Return the first 1000 characters as a fallback
-    except Exception as e:
-        print(f"Error fetching full speech: {e}")
-        return "Unable to retrieve full speech."
-"""
+        Parameters:
+            start_date (str): Start date in 'YYYY-MM-DD' format.
+            end_date (str): End date in 'YYYY-MM-DD' format.
+            kwargs: Additional parameters to pass to the get_hansard function.
+
+        Returns:
+            list: A list of Hansard speeches within the specified date range.
+        """
+        try:
+            # Convert start and end dates to datetime objects
+            start_date_obj = datetime.strptime(start_date, "%Y-%m-%d")
+            end_date_obj = datetime.strptime(end_date, "%Y-%m-%d")
+
+            # Fetch data using get_hansard
+            hansard_data = self.get_hansard(**kwargs)
+            if not hansard_data:
+                print("No Hansard data retrieved.")
+                return []
+
+            # Filter data by date range
+            filtered_speeches = [
+                entry for entry in hansard_data
+                if start_date_obj <= datetime.strptime(entry.get('hdate', '1900-01-01'), "%Y-%m-%d") <= end_date_obj
+            ]
+
+            return filtered_speeches
+
+        except Exception as e:
+            print(f"Error in get_hansard_by_date_range: {e}")
+            return []
+
 def fetch_full_speech(url):
     """
     Fetch the full speech from the provided URL.
@@ -398,53 +399,44 @@ def fetch_full_speech(url):
         str: The full speech text if successful, else an error message.
     """
     try:
-        # Unescape the URL
-        unescaped_url = unescape(url)
-        # Remove fragment identifier
-        unescaped_url = unescaped_url.split('#')[0]
-        # Ensure the URL is absolute
+        # Unescape the URL and ensure it's absolute
+        unescaped_url = unescape(url).split('#')[0]
         if not unescaped_url.startswith('http'):
             full_url = urljoin("https://www.openaustralia.org.au", unescaped_url)
         else:
             full_url = unescaped_url
 
         print(f"Fetching full speech from {full_url}")
-        response = requests.get(full_url)
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/87.0.4280.66 Safari/537.36'
+        }
+        response = requests.get(full_url, headers=headers)
         response.raise_for_status()
 
-        # Parse the HTML to extract the full speech text
+        # Parse the HTML content
         soup = BeautifulSoup(response.content, 'lxml')
 
-        # Inspect the page manually to determine the correct selector
-        # Example selectors - these may need to be adjusted based on actual HTML structure
-        possible_selectors = [
-            {'name': 'div', 'attrs': {'class': 'speech'}},
-            {'name': 'div', 'attrs': {'class': 'speech_text'}},
-            {'name': 'div', 'attrs': {'id': 'speech'}},
-            {'name': 'div', 'attrs': {'class': 'debate-body'}},
-            {'name': 'div', 'attrs': {'class': 'speech-content'}},  # Additional example
-            {'name': 'div', 'attrs': {'class': 'full-speech'}},      # Additional example
-        ]
-
-        speech_div = None
-        for selector in possible_selectors:
-            speech_div = soup.find(selector['name'], selector['attrs'])
-            if speech_div:
-                break
+        # Try fetching specific divs for speech
+        speech_div = (
+            soup.find('div', {'class': 'speech'}) or
+            soup.find('div', {'class': 'speech_text'}) or
+            soup.find('div', {'id': 'speech'}) or
+            soup.find('div', {'class': 'debate-body'})
+        )
 
         if speech_div:
             full_speech = speech_div.get_text(separator="\n").strip()
-            # Clean up the speech text if necessary
-            return full_speech
         else:
-            # If the expected div is not found, attempt to extract the speech differently
-            print(f"Could not find the speech content in the page: {full_url}")
-            # As a fallback, extract all text and attempt to isolate the speech
-            all_text = soup.get_text(separator="\n").strip()
-            # This is a naive approach and may need refinement
-            return all_text[:100000] + '...'  # Return the first 1000 characters as a fallback
+            # Fallback to extracting all text
+            print("Could not find specific speech div, extracting entire text.")
+            full_speech = soup.get_text(separator=" ").strip()
+
+        # Normalize the text to remove excessive spacing
+        cleaned_speech = ' '.join(full_speech.split())
+
+        return cleaned_speech
     except Exception as e:
-        print(f"Error fetching full speech from {url}: {e}")
+        print(f"Error fetching and cleaning speech from {url}: {e}")
         return "Unable to retrieve full speech."
 
 def export_speeches_to_csv(person_id, filename="hansard_speeches.csv"):
@@ -463,7 +455,7 @@ def export_speeches_to_csv(person_id, filename="hansard_speeches.csv"):
         return
 
     print(f"\n--- Fetching Hansard Entries for Person ID: {person_id} ---")
-    hansard_entries = oa_api.get_hansard(person=person_id)
+    hansard_entries = oa_api.get_hansard_by_date_range(start_date='2023-12-05', end_date='2024-12-05', person=person_id, num=9999)
 
     if hansard_entries:
         speeches = []
@@ -512,14 +504,77 @@ def export_speeches_to_csv(person_id, filename="hansard_speeches.csv"):
         df = pd.DataFrame(speeches)
 
         # Export the DataFrame to a CSV file
-        df.to_csv(filename, index=False, encoding='utf-8')
+        df.to_excel(filename, index=False, engine='openpyxl')
 
         print(f"Speeches have been successfully exported to {filename}.")
     else:
         print("No Hansard entries found or an error occurred.")
 
 # Example usage:
-export_speeches_to_csv(person_id="10835", filename="hansard_speeches.csv")
+export_speeches_to_csv(person_id="10809", filename="hansard_speeches.xlsx")
+
+def sanitize_text(text):
+    """
+    Replace or remove unsupported Unicode characters from text.
+    """
+    return unicodedata.normalize('NFKD', text).encode('ascii', 'ignore').decode('ascii')
+
+def export_speeches_to_pdf(person_id, filename="hansard_speeches.pdf"):
+    """
+    Fetch Hansard entries for a given person and export the speeches to a PDF file.
+
+    Parameters:
+        person_id (str): The ID of the person whose speeches are to be fetched.
+        filename (str): The name of the output PDF file. Defaults to "hansard_speeches.pdf".
+    """
+    # Initialize the API client
+    try:
+        oa_api = OpenAustraliaAPI()
+    except ValueError as ve:
+        print(ve)
+        return
+
+    print(f"\n--- Fetching Hansard Entries for Person ID: {person_id} ---")
+    hansard_entries = oa_api.get_hansard(person=person_id)
+
+    if hansard_entries:
+        pdf = FPDF()
+        pdf.add_page()
+        pdf.set_font("Arial", size=12)  # Use default Arial font, which supports ASCII characters
+
+        for entry in hansard_entries:
+            date = entry.get('hdate', 'Unknown Date')
+            speaker = entry.get('speaker', {}).get('full_name', 'Unknown Speaker')
+            body = entry.get('body', 'No content')
+            listurl = entry.get('listurl')
+
+            # Fetch full speech if needed
+            if body.endswith('...') or '&#' in body or len(body) < 200:
+                if listurl:
+                    body = fetch_full_speech(listurl)
+                else:
+                    body = "Unable to retrieve full speech."
+
+            # Sanitize text to remove unsupported characters
+            speaker = sanitize_text(speaker)
+            body = sanitize_text(body)
+
+            # Add speech to PDF
+            pdf.set_font("Arial", style="B", size=12)
+            pdf.cell(0, 10, f"Speaker: {speaker}", ln=1)
+            pdf.set_font("Arial", size=10)
+            pdf.cell(0, 10, f"Date: {date}", ln=1)
+            pdf.multi_cell(0, 10, f"Speech: {body}")
+            pdf.ln(10)  # Add some space after each speech
+
+        # Save the PDF
+        pdf.output(filename)
+        print(f"Speeches have been successfully exported to {filename}.")
+    else:
+        print("No Hansard entries found or an error occurred.")
+
+# Example usage
+#export_speeches_to_pdf(person_id="10809", filename="hansard_speeches.pdf")
 
 
 def main():
