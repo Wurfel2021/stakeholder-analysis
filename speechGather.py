@@ -387,6 +387,49 @@ class OpenAustraliaAPI:
         except Exception as e:
             print(f"Error in get_hansard_by_date_range: {e}")
             return []
+    
+    def get_person_id(self, name):
+        """
+        Search for a politician by name and return their person_id.
+
+        Parameters:
+            name (str): Full or partial name of the politician.
+
+        Returns:
+            dict: A dictionary with the person's details and person_id if found.
+                  Returns None if no match is found.
+        """
+        # Search in senators
+        print(f"Searching for '{name}' in senators...")
+        senators = self.get_senators(search=name)
+        if senators:
+            for senator in senators:
+                if name.lower() in senator.get('name', '').lower():
+                    return {
+                        'person_id': senator.get('person_id'),
+                        'name': senator.get('name'),
+                        'party': senator.get('party'),
+                        'state': senator.get('constituency'),
+                        'role': 'Senator'
+                    }
+
+        # Search in representatives
+        print(f"Searching for '{name}' in representatives...")
+        representatives = self.get_representatives(search=name)
+        if representatives:
+            for rep in representatives:
+                if name.lower() in rep.get('name', '').lower():
+                    return {
+                        'person_id': rep.get('person_id'),
+                        'name': rep.get('name'),
+                        'party': rep.get('party'),
+                        'division': rep.get('constituency'),
+                        'role': 'Representative'
+                    }
+
+        # No match found
+        print(f"No match found for '{name}'.")
+        return None
 
 def fetch_full_speech(url):
     """
@@ -511,7 +554,7 @@ def export_speeches_to_csv(person_id, filename="hansard_speeches.csv"):
         print("No Hansard entries found or an error occurred.")
 
 # Example usage:
-export_speeches_to_csv(person_id="10809", filename="hansard_speeches.xlsx")
+#export_speeches_to_csv(person_id="10809", filename="hansard_speeches.xlsx")
 
 def sanitize_text(text):
     """
@@ -572,6 +615,7 @@ def export_speeches_to_pdf(person_id, filename="hansard_speeches.pdf"):
         print(f"Speeches have been successfully exported to {filename}.")
     else:
         print("No Hansard entries found or an error occurred.")
+        
 
 # Example usage
 #export_speeches_to_pdf(person_id="10809", filename="hansard_speeches.pdf")
@@ -584,14 +628,31 @@ def main():
     except ValueError as ve:
         print(ve)
         return
-    # Example 2: Fetch a specific Senator by id
-    print("\n--- Example 2: Fetch Senator by id ---")
-    senator_id = "10835"  # Replace with a valid id
-    senator_details = oa_api.get_senator(id=senator_id)
-    if senator_details:
-        print(senator_details)
+
+    # Ask the user for a politician's name
+    politician_name = input("Enter the name of the politician: ").strip()
+    
+    # Get the person_id dynamically
+    person_details = oa_api.get_person_id(politician_name)
+    if person_details:
+        print(f"Match found: {person_details}")
+        person_id = person_details['person_id']
+
+        # Example: Fetch speeches and export to Excel
+        #export_speeches_to_csv(person_id=person_id, filename=f"{person_details['name']}_speeches.xlsx")
+        #export_speeches_to_pdf(person_id=person_id, filename=f"{person_details['name']}_speeches.pdf")
+        print("found")
     else:
-        print("Senator not found or an error occurred.")
+        print("No politician found with that name.")
+
+    # Example 2: Fetch a specific Senator by id
+    #print("\n--- Example 2: Fetch Senator by id ---")
+    #senator_id = "10835"  # Replace with a valid id
+    #senator_details = oa_api.get_senator(id=senator_id)
+    #if senator_details:
+    #    print(senator_details)
+    #else:
+    #    print("Senator not found or an error occurred.")
     """
     # Initialize the API client
     try:
